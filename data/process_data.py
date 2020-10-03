@@ -25,31 +25,36 @@ def get_files(source, patterns):
         for file in files:
             yield file
 
-parser = argparse.ArgumentParser(description='Process and a clean a raw dataset of halloween costumes')
-parser.add_argument('dataset_source', help='The path to the directory containing the source dataset.', type=Path, action=ReadableDirectory)
-parser.add_argument('--destination', '-d', dest='dataset_destination', help='The path to the directory which the cleaned '
-                    'dataset should be saved. If this is not specified, the cleaned files are saved in the same parent '
-                    'folder as the source.', type=Path, default=None)
-parser.add_argument('--file-glob-patterns', nargs='+', type=str, default=['*.png', '*.jpeg', '*.jpg'],
-                    help='The glob patterns to use to find files in the source directory.')
-args = parser.parse_args()
+def main():
+    """Main entrypoint when running this module from the terminal."""
 
-# Create a destination path if none was provided.
-if args.dataset_destination is None:
-    args.dataset_destination = args.dataset_source.parent / (args.dataset_source.stem + '_cleaned')
+    parser = argparse.ArgumentParser(description='Process and a clean a raw dataset of halloween costumes')
+    parser.add_argument('dataset_source', help='The path to the directory containing the source dataset.', type=Path, action=ReadableDirectory)
+    parser.add_argument('--destination', '-d', dest='dataset_destination', help='The path to the directory which the cleaned '
+                        'dataset should be saved. If this is not specified, the cleaned files are saved in the same parent '
+                        'folder as the source.', type=Path, default=None)
+    parser.add_argument('--file-glob-patterns', nargs='+', type=str, default=['*.png', '*.jpeg', '*.jpg'],
+                        help='The glob patterns to use to find files in the source directory.')
+    args = parser.parse_args()
 
-if args.dataset_destination.exists() and any(args.dataset_destination.iterdir()):
-    click.confirm(
-        f'The destination path (\'{args.dataset_destination.resolve()}\') '
-        'already exists! Would you like to continue? This will overwrite the directory.',
-        abort=True
-    )
+    # Create a destination path if none was provided.
+    if args.dataset_destination is None:
+        args.dataset_destination = args.dataset_source.parent / (args.dataset_source.stem + '_cleaned')
 
-    shutil.rmtree(args.dataset_destination)
+    if args.dataset_destination.exists() and any(args.dataset_destination.iterdir()):
+        click.confirm(
+            f'The destination path (\'{args.dataset_destination.resolve()}\') '
+            'already exists! Would you like to continue? This will overwrite the directory.',
+            abort=True
+        )
 
-if not args.dataset_destination.exists():
-    args.dataset_destination.mkdir()
+        shutil.rmtree(args.dataset_destination)
 
-files = get_files(args.dataset_source, args.file_glob_patterns)
-for file in files:
-    print(file.absolute())
+    args.dataset_destination.mkdir(exist_ok=True, parents=True)
+
+    files = get_files(args.dataset_source, args.file_glob_patterns)
+    for file in files:
+        print(file.absolute())
+
+if __name__ == '__main__':
+    main()
