@@ -17,27 +17,6 @@ class ReadableDirectory(argparse.Action):
 
         setattr(namespace, self.dest, value)
 
-def initialize_arguments(args):
-    """Validates and initializes arguments."""
-
-    # Create a destination path if none was provided.
-    if args.dataset_destination is None:
-        args.dataset_destination = args.dataset_source.parent / (args.dataset_source.stem + '_cleaned')
-
-    if args.dataset_destination.exists() and any(args.dataset_destination.iterdir()):
-        click.confirm(
-            f'The destination path (\'{args.dataset_destination.resolve()}\') '
-            'already exists! Would you like to continue? This will overwrite the directory.',
-            abort=True
-        )
-
-        shutil.rmtree(args.dataset_destination)
-
-    if not args.dataset_destination.exists():
-        args.dataset_destination.mkdir()
-
-    return args
-
 def get_files(source, patterns):
     """Get all the paths matching the given list of glob patterns."""
 
@@ -53,7 +32,23 @@ parser.add_argument('--destination', '-d', dest='dataset_destination', help='The
                     'folder as the source.', type=Path, default=None)
 parser.add_argument('--file-glob-patterns', nargs='+', type=str, default=['*.png', '*.jpeg', '*.jpg'],
                     help='The glob patterns to use to find files in the source directory.')
-args = initialize_arguments(parser.parse_args())
+args = parser.parse_args()
+
+# Create a destination path if none was provided.
+if args.dataset_destination is None:
+    args.dataset_destination = args.dataset_source.parent / (args.dataset_source.stem + '_cleaned')
+
+if args.dataset_destination.exists() and any(args.dataset_destination.iterdir()):
+    click.confirm(
+        f'The destination path (\'{args.dataset_destination.resolve()}\') '
+        'already exists! Would you like to continue? This will overwrite the directory.',
+        abort=True
+    )
+
+    shutil.rmtree(args.dataset_destination)
+
+if not args.dataset_destination.exists():
+    args.dataset_destination.mkdir()
 
 files = get_files(args.dataset_source, args.file_glob_patterns)
 for file in files:
