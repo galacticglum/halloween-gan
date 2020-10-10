@@ -3,4 +3,5 @@ clint==0.5.1
 numpy==1.19.2
 opencv-python==4.4.0.44
 requests==2.24.0
+tqdm==4.50.2
 git+git://github.com/GalacticGlum/u2net-wrapper.git#egg=u2net_wrapper

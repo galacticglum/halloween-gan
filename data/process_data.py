@@ -1,10 +1,14 @@
 """Process and clean a raw dataset of halloween costumes."""
 
 import os
+import tqdm
 import click
 import shutil
 import argparse
+from PIL import Image
 from pathlib import Path
+from u2net_wrapper import U2Net
+from face_detection import detect_faces
 
 class ReadableDirectory(argparse.Action):
     """Makes sure that a directory argument is a valid path and readable."""
@@ -21,7 +25,7 @@ def get_files(source, patterns):
     """Get all the paths matching the given list of glob patterns."""
 
     for pattern in patterns:
-        files = args.dataset_source.glob(f'**/{pattern}')
+        files = source.glob(f'**/{pattern}')
         for file in files:
             yield file
 
@@ -35,6 +39,11 @@ def main():
                         'folder as the source.', type=Path, default=None)
     parser.add_argument('--file-glob-patterns', nargs='+', type=str, default=['*.png', '*.jpeg', '*.jpg'],
                         help='The glob patterns to use to find files in the source directory.')
+    parser.add_argument('--no-remove-transparency', action='store_false', dest='remove_transparency',
+                        help='Remove transparency and replace it with a colour.')
+    parser.add_argument('--bg-colour', type=str, default='WHITE', help='The colour to replace transparency with.')
+    parser.add_argument('--u2net-size', type=str, default='large', help='The size of the pretrained U-2-net model. Either \'large\' or \'small\'.')
+    parser.add_argument('--yes', '-y', action='store_true', help='Yes to all.')
     args = parser.parse_args()
 
     # Create a destination path if none was provided.
@@ -42,19 +51,36 @@ def main():
         args.dataset_destination = args.dataset_source.parent / (args.dataset_source.stem + '_cleaned')
 
     if args.dataset_destination.exists() and any(args.dataset_destination.iterdir()):
-        click.confirm(
-            f'The destination path (\'{args.dataset_destination.resolve()}\') '
-            'already exists! Would you like to continue? This will overwrite the directory.',
-            abort=True
-        )
+        if not args.yes:
+            click.confirm(
+                f'The destination path (\'{args.dataset_destination.resolve()}\') '
+                'already exists! Would you like to continue? This will overwrite the directory.',
+                abort=True
+            )
 
         shutil.rmtree(args.dataset_destination)
 
     args.dataset_destination.mkdir(exist_ok=True, parents=True)
 
-    files = get_files(args.dataset_source, args.file_glob_patterns)
-    for file in files:
-        print(file.absolute())
+    u2net = U2Net(pretrained_model_name=args.u2net_size)
+    files = list(get_files(args.dataset_source, args.file_glob_patterns))
+    with tqdm.tqdm(files) as progress:
+        for file in progress:
+            progress.set_description(f'Processing {file.name}')
+            detection = detect_faces(file)
+            if len(detection) != 1: continue
+
+            destination = args.dataset_destination / (file.stem + '.png')
+            image = u2net.remove_background(file)
+
+            # Replace transparency with colour
+            if args.remove_transparency:
+                background_image = Image.new('RGBA', image.size, args.bg_colour)
+                background_image.paste(image, (0, 0), image)
+                image = background_image.convert('RGB')
+
+            # Output processed image
+            image.save(str(destination))
 
 if __name__ == '__main__':
     main()
