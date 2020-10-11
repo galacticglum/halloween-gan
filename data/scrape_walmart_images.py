@@ -220,7 +220,7 @@ args.output_directory.mkdir(parents=True, exist_ok=True)
 for url in tqdm.tqdm(result):
     response = requests.get(url, stream=True)
     extension = mimetypes.guess_extension(response.headers['content-type'])
-    filepath = args.output_directory / f'{uuid.uuid4()}.{extension}'
+    filepath = args.output_directory / f'{uuid.uuid4()}{extension}'
     with open(filepath, 'wb+') as file:
         for chunk in response.iter_content(args.chunk_size):
             if not chunk: break
