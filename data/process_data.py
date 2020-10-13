@@ -1,6 +1,7 @@
 """Process and clean a raw dataset of halloween costumes."""
 
 import os
+import time
 import tqdm
 import click
 import shutil
@@ -8,7 +9,7 @@ import argparse
 from PIL import Image
 from pathlib import Path
 from u2net_wrapper import U2Net
-from face_detection import detect_faces
+from face_detection import FaceDetector
 
 class ReadableDirectory(argparse.Action):
     """Makes sure that a directory argument is a valid path and readable."""
@@ -28,6 +29,21 @@ def get_files(source, patterns):
         files = source.glob(f'**/{pattern}')
         for file in files:
             yield file
+
+def _rmtree(path, ignore_errors=False, onerror=None, timeout=10):
+    """
+    A wrapper method for 'shutil.rmtree' that waits up to the specified
+    `timeout` period, in seconds.
+    """
+    shutil.rmtree(path, ignore_errors, onerror)
+
+    if path.is_dir():
+        print(f'shutil.rmtree - Waiting for \'{path}\' to be removed...')
+        # The destination path has yet to be deleted. Wait, at most, the timeout period.
+        timeout_time = time.time() + timeout
+        while time.time() <= timeout_time:
+            if not path.is_dir():
+                break
 
 def main():
     """Main entrypoint when running this module from the terminal."""
@@ -58,17 +74,19 @@ def main():
                 abort=True
             )
 
-        shutil.rmtree(args.dataset_destination)
+        _rmtree(args.dataset_destination)
 
     args.dataset_destination.mkdir(exist_ok=True, parents=True)
 
     u2net = U2Net(pretrained_model_name=args.u2net_size)
+    face_detector = FaceDetector()
+
     files = list(get_files(args.dataset_source, args.file_glob_patterns))
     with tqdm.tqdm(files) as progress:
         for file in progress:
             progress.set_description(f'Processing {file.name}')
-            detection = detect_faces(file)
-            if len(detection) != 1: continue
+            face_detection_results = face_detector.detect_faces(file)
+            if len(face_detection_results) != 1: continue
 
             destination = args.dataset_destination / (file.stem + '.png')
             image = u2net.remove_background(file)

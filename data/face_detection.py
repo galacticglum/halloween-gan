@@ -54,36 +54,6 @@ def get_md5_from_file(filepath, chunk_size=8196):
 
     return h.hexdigest()
 
-def get_default_model_files():
-    """Gets the default model weight filepaths."""
-
-    # URLs for downloading the ResNet10 SSD model for face detection.
-    _DEFAULT_FILES = {
-        'prototxt': {
-            'md5': 'bf7a2a8de014b7b187783f1da382485c',
-            'url': 'https://github.com/opencv/opencv/raw/3.4.0/samples/dnn/face_detector/deploy.prototxt',
-            'save_filename': 'res10_deploy.prototxt'
-        },
-        'model_weights': {
-            'md5': 'afbb6037fd180e8d2acb3b58ca737b9e',
-            'url': 'https://github.com/opencv/opencv_3rdparty/raw/dnn_samples_face_detector_20170830/res10_300x300_ssd_iter_140000.caffemodel',
-            'save_filename': 'res10_300x300_ssd_iter_140000.caffemodel'
-        }
-    }
-
-    destination_dir = Path(tempfile.gettempdir()) / 'halloween-gan'
-    destination_dir.mkdir(exist_ok=True)
-
-    filepaths = {}
-    for file_key, file in _DEFAULT_FILES.items():
-        destination_filepath = destination_dir / file['save_filename']
-        filepaths[file_key] = destination_filepath
-
-        if get_md5_from_file(destination_filepath) == file['md5']: continue
-        download_file(file['url'], destination_filepath)
-
-    return filepaths['prototxt'], filepaths['model_weights']
-
 class FaceDetectionResult:
     """
     A face detected in an image.
@@ -110,82 +80,120 @@ class FaceDetectionResult:
         """Returns an internal representation of this object."""
         return f'<FaceDetectionResult(bounding_box={self.bounding_box}, confidence={self.confidence})>'
 
-def detect_faces(image_filepath, prototxt_filepath=None,
-                 model_weights_filepath=None, confidence_threshold=0.5,
-                 show_image=False):
-    """
-    Perform face detection on the input image.
+class FaceDetector:
+    """An interface for detecting faces."""
 
-    :param image_filepath:
-        The filepath of the image to run facial detection on.
-    :param prototxt_filepath:
-        The filepath to the Caffe model prototxt. Defaults to None,
-        meaning that the default ResNet10 SSD model prototxt is used.
-    :param model_weights_filepath:
-        The filepath to the Caffe model weights. Defaults to None,
-        meaning that the default ResNet 10 SSD model weights are used.
-    :param show_image:
-        Show the image and generated bounding boxes. Defaults to False.
-    :returns:
-        A list of `FaceDetectionResult` objects.
+    def __init__(self, prototxt_filepath=None, model_weights_filepath=None):
+        """
+        Initialize the face detector.
 
-    """
+        :param prototxt_filepath:
+            The filepath to the Caffe model prototxt. Defaults to None,
+            meaning that the default ResNet10 SSD model prototxt is used.
+        :param model_weights_filepath:
+            The filepath to the Caffe model weights. Defaults to None,
+            meaning that the default ResNet 10 SSD model weights are used.
+        """
 
-    image_filepath = Path(image_filepath)
-    if not image_filepath.exists():
-        raise FileNotFoundError(f'The file \'{image_filepath.resolve()}\' was not found!')
+        # Load model files (if not provided)
+        if prototxt_filepath is None or model_weights_filepath is None:
+            filepaths = FaceDetector.get_default_model_files()
+            prototxt_filepath = filepaths[0] or prototxt_filepath
+            model_weights_filepath = filepaths[1] or model_weights_filepath
 
-    # Load model files (if not provided)
-    if prototxt_filepath is None or model_weights_filepath is None:
-        filepaths = get_default_model_files()
-        prototxt_filepath = filepaths[0] or prototxt_filepath
-        model_weights_filepath = filepaths[1] or model_weights_filepath
+        self._model = cv2.dnn.readNetFromCaffe(
+            # We need to convert the filepaths to strings for opencv
+            str(Path(prototxt_filepath).absolute()),
+            str(Path(model_weights_filepath).absolute())
+        )
 
-    model = cv2.dnn.readNetFromCaffe(
-        # We need to convert the filepaths to strings for opencv
-        str(Path(prototxt_filepath).absolute()),
-        str(Path(model_weights_filepath).absolute())
-    )
+    def detect_faces(self, image_filepath, confidence_threshold=0.5, show_image=False):
+        """
+        Perform face detection on the input image.
 
-    image = cv2.imread(str(image_filepath.absolute()))
-    # Store the original shape of the image before resizing
-    height, width = image.shape[:2]
-    # Generate an input to the resnet model
-    input_blob = cv2.dnn.blobFromImage(
-        # The model expects a 300x300 image.
-        cv2.resize(image, (300, 300)),
-        scalefactor=1.0,
-        size=(300, 300),
-        mean=(104.0, 177.0, 123.0)
-    )
+        :param image_filepath:
+            The filepath of the image to run facial detection on.
+        :param show_image:
+            Show the image and generated bounding boxes. Defaults to False.
 
-    # Perform face detection with the input blob
-    model.setInput(input_blob)
-    output = model.forward()
+        :returns:
+            A list of `FaceDetectionResult` objects.
+        """
 
-    result = []
-    for i in range(output.shape[2]):
-        confidence = output[0, 0, i, 2]
-        if confidence < confidence_threshold: continue
+        image_filepath = Path(image_filepath)
+        if not image_filepath.exists():
+            raise FileNotFoundError(f'The file \'{image_filepath.resolve()}\' was not found!')
 
-        # Compute the bounding box
-        bounding_box = output[0, 0, i, 3:7] * np.array([width, height, width, height])
-        x1, y1, x2, y2 = bounding_box.astype('int')
+        image = cv2.imread(str(image_filepath.absolute()))
+        # Store the original shape of the image before resizing
+        height, width = image.shape[:2]
+        # Generate an input to the resnet model
+        input_blob = cv2.dnn.blobFromImage(
+            # The model expects a 300x300 image.
+            cv2.resize(image, (300, 300)),
+            scalefactor=1.0,
+            size=(300, 300),
+            mean=(104.0, 177.0, 123.0)
+        )
+
+        # Perform face detection with the input blob
+        self._model.setInput(input_blob)
+        output = self._model.forward()
+
+        result = []
+        for i in range(output.shape[2]):
+            confidence = output[0, 0, i, 2]
+            if confidence < confidence_threshold: continue
+
+            # Compute the bounding box
+            bounding_box = output[0, 0, i, 3:7] * np.array([width, height, width, height])
+            x1, y1, x2, y2 = bounding_box.astype('int')
+
+            if show_image:
+                confidence_str = f'{confidence:.4f}'
+                # Draw confidence label
+                cv2.putText(image, confidence_str, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), thickness=1)
+                # Draw bounding box
+                cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), thickness=1)
+
+            result.append(FaceDetectionResult((x1, y1, x2, y2), confidence))
 
         if show_image:
-            confidence_str = f'{confidence:.4f}'
-            # Draw confidence label
-            cv2.putText(image, confidence_str, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), thickness=1)
-            # Draw bounding box
-            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 0, 255), thickness=1)
+            cv2.imshow('Output', image)
+            cv2.waitKey(0)
 
-        result.append(FaceDetectionResult((x1, y1, x2, y2), confidence))
+        return result
 
-    if show_image:
-        cv2.imshow('Output', image)
-        cv2.waitKey(0)
+    @staticmethod
+    def get_default_model_files():
+        """Gets the default model weight filepaths."""
 
-    return result
+        # URLs for downloading the ResNet10 SSD model for face detection.
+        _DEFAULT_FILES = {
+            'prototxt': {
+                'md5': 'bf7a2a8de014b7b187783f1da382485c',
+                'url': 'https://github.com/opencv/opencv/raw/3.4.0/samples/dnn/face_detector/deploy.prototxt',
+                'save_filename': 'res10_deploy.prototxt'
+            },
+            'model_weights': {
+                'md5': 'afbb6037fd180e8d2acb3b58ca737b9e',
+                'url': 'https://github.com/opencv/opencv_3rdparty/raw/dnn_samples_face_detector_20170830/res10_300x300_ssd_iter_140000.caffemodel',
+                'save_filename': 'res10_300x300_ssd_iter_140000.caffemodel'
+            }
+        }
+
+        destination_dir = Path(tempfile.gettempdir()) / 'halloween-gan'
+        destination_dir.mkdir(exist_ok=True)
+
+        filepaths = {}
+        for file_key, file in _DEFAULT_FILES.items():
+            destination_filepath = destination_dir / file['save_filename']
+            filepaths[file_key] = destination_filepath
+
+            if get_md5_from_file(destination_filepath) == file['md5']: continue
+            download_file(file['url'], destination_filepath)
+
+        return filepaths['prototxt'], filepaths['model_weights']
 
 def main():
     """Main entrypoint when running this module from the terminal."""
@@ -203,10 +211,15 @@ def main():
                         help='Show the bounding box results.')
     args = parser.parse_args()
 
-    detect_faces(
-        args.image_filepath,
+    # Initialize model
+    face_detector = FaceDetector(
         prototxt_filepath=args.prototxt_filepath,
-        model_weights_filepath=args.model_weights_filepath,
+        model_weights_filepath=args.model_weights_filepath
+    )
+
+    # Run face detection
+    face_detector.detect_faces(
+        args.image_filepath,
         confidence_threshold=args.confidence_threshold,
         show_image=args.show_bounding_boxes
     )
