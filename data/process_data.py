@@ -60,7 +60,7 @@ def main():
     parser.add_argument('--bg-colour', type=str, default='WHITE', help='The colour to replace transparency with.')
     parser.add_argument('--u2net-size', type=str, default='large', help='The size of the pretrained U-2-net model. Either \'large\' or \'small\'.')
     parser.add_argument('--face_image_ratio_threshold', type=float, default=0.05, help='The maximum face-to-image area ratio that is allowed.')
-    parser.add_argument('--crop-face', dest='crop_face', action='store_true', help='Crop out faces.')
+    parser.add_argument('--crop-faces', dest='crop_faces', action='store_true', help='Crop out faces.')
     parser.add_argument('--yes', '-y', action='store_true', help='Yes to all.')
     args = parser.parse_args()
 
@@ -90,11 +90,13 @@ def main():
 
             # Skip images that don't have a single face in them...
             face_detection_results = face_detector.detect_faces(file)
-            if len(face_detection_results) != 1: continue
+            if len(face_detection_results) != 1:
+                continue
 
             segmentation_map = u2net.segment_image(file)
             # Remove background from image (using U2Net)
             image = u2net.remove_background(file, segmentation_map)
+            old_image_width, old_image_height = image.size
 
             # Crop image to bounding box (using U2Net)
             bounding_box = u2net.get_bounding_box(segmentation_map)
@@ -113,10 +115,14 @@ def main():
             if face_image_ratio > args.face_image_ratio_threshold:
                 continue
 
-            if args.crop_face:
+            if args.crop_faces:
                 # Crop out the face...
                 # This assumes that the image is of a person standing vertically.
-                pass
+
+                # Convert the bottom-right y-coordinate of the face bounding box
+                # into the coordinate system AFTER cropping.
+                adjusted_fbb_y2 = fbb[3] - bounding_box[1]
+                image = image.crop((0, adjusted_fbb_y2 - fbb_height * 0.10, image_width, image_height))
 
             if args.remove_transparency:
                 # Replace transparency with colour
