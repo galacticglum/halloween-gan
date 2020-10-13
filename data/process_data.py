@@ -85,19 +85,27 @@ def main():
     with tqdm.tqdm(files) as progress:
         for file in progress:
             progress.set_description(f'Processing {file.name}')
+
+            # Skip images that don't have a single face in them...
             face_detection_results = face_detector.detect_faces(file)
             if len(face_detection_results) != 1: continue
 
-            destination = args.dataset_destination / (file.stem + '.png')
-            image = u2net.remove_background(file)
+            segmentation_map = u2net.segment_image(file)
+            # Remove background from image (using U2Net)
+            image = u2net.remove_background(file, segmentation_map)
 
-            # Replace transparency with colour
+            # Crop image to bounding box (using U2Net)
+            bounding_box = u2net.get_bounding_box(segmentation_map)
+            image = image.crop(bounding_box)
+
             if args.remove_transparency:
+                # Replace transparency with colour
                 background_image = Image.new('RGBA', image.size, args.bg_colour)
                 background_image.paste(image, (0, 0), image)
                 image = background_image.convert('RGB')
 
             # Output processed image
+            destination = args.dataset_destination / (file.stem + '.png')
             image.save(str(destination))
 
 if __name__ == '__main__':
