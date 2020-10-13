@@ -59,6 +59,8 @@ def main():
                         help='Remove transparency and replace it with a colour.')
     parser.add_argument('--bg-colour', type=str, default='WHITE', help='The colour to replace transparency with.')
     parser.add_argument('--u2net-size', type=str, default='large', help='The size of the pretrained U-2-net model. Either \'large\' or \'small\'.')
+    parser.add_argument('--face_image_ratio_threshold', type=float, default=0.05, help='The maximum face-to-image area ratio that is allowed.')
+    parser.add_argument('--crop-face', dest='crop_face', action='store_true', help='Crop out faces.')
     parser.add_argument('--yes', '-y', action='store_true', help='Yes to all.')
     args = parser.parse_args()
 
@@ -97,6 +99,24 @@ def main():
             # Crop image to bounding box (using U2Net)
             bounding_box = u2net.get_bounding_box(segmentation_map)
             image = image.crop(bounding_box)
+
+            # Tuple of the form (x1, y1, x2, y2)
+            fbb = face_detection_results[0].bounding_box
+            fbb_width = (fbb[2] - fbb[0])
+            fbb_height = (fbb[3] - fbb[1])
+
+            image_width, image_height = image.size
+            # Compute the face-to-image area ratio.
+            # This is used as a heuristic to filter out portrait images
+            # (i.e. when the face takes up more than a certain percentage of the total image).
+            face_image_ratio = (fbb_width * fbb_height) / (image_width * image_height)
+            if face_image_ratio > args.face_image_ratio_threshold:
+                continue
+
+            if args.crop_face:
+                # Crop out the face...
+                # This assumes that the image is of a person standing vertically.
+                pass
 
             if args.remove_transparency:
                 # Replace transparency with colour
