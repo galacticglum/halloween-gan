@@ -8,8 +8,8 @@ import shutil
 import argparse
 from PIL import Image
 from pathlib import Path
-from u2net_wrapper import U2Net
 from face_detection import FaceDetector
+from u2net_wrapper import U2Net, InvalidImageError
 
 class ReadableDirectory(argparse.Action):
     """Makes sure that a directory argument is a valid path and readable."""
@@ -94,9 +94,13 @@ def main():
                 continue
 
             segmentation_map = u2net.segment_image(file)
-            # Remove background from image (using U2Net)
-            image = u2net.remove_background(file, segmentation_map)
-            old_image_width, old_image_height = image.size
+
+            try:
+                # Remove background from image (using U2Net)
+                image = u2net.remove_background(file, segmentation_map)
+                old_image_width, old_image_height = image.size
+            except InvalidImageError as e:
+                continue
 
             # Crop image to bounding box (using U2Net)
             bounding_box = u2net.get_bounding_box(segmentation_map)
