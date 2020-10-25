@@ -2,12 +2,19 @@
 #
 #
 # Perform data set normalization on a cleaned dataset.
-# Run with: bash normalize_data.sh <source_directory> <destination_directory> <target_width=512> <target_height=512> <lossy_compression=33>
+# Run with: bash normalize_data.sh <source_directory> <destination_directory> <target_width=512> <target_height=512> <quality=-1>
 
 convertPNGToJPG() {
     filename="$(basename "$1")"
     target="$__DESTINATION_DIRECTORY/${filename%.*}"
-    convert -quality "$__LOSSY_COMPRESSION_PERCENT" "$1" "$target".jpg;
+    quality_flag=""
+    if [[ $__QUALITY -gt 0 ]]; then
+        quality_flag="-quality $__QUALITY"
+    else
+        quality_flag=""
+    fi
+
+    convert"$quality_flag" "$1" "$target".jpg;
 }
 export -f convertPNGToJPG
 
@@ -18,7 +25,7 @@ function die () {
 
 # Require argument
 [ "$#" -ge 2 ] || die "2 arguments required, $# provided"
-export __LOSSY_COMPRESSION_PERCENT=${5:-33}
+export __QUALITY=${5:--1}
 export __DESTINATION_DIRECTORY="$2"
 mkdir -p "$__DESTINATION_DIRECTORY"
 

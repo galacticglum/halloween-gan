@@ -7,7 +7,7 @@
 function dataAugment () {
     image="$1"
     target="$__DESTINATION_DIRECTORY$(basename "$1")"
-    suffix="png"
+    suffix="${image##*.}"
 
     convert -deskew 50                     "$image" "$target".deskew."$suffix"
     convert -blue-shift 1.1                "$image" "$target".midnight."$suffix"
