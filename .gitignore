@@ -134,3 +134,4 @@ dmypy.json
 # data folder
 data/**
 !data/*.py
+!/data/*.sh
