@@ -37,6 +37,5 @@ WIDTH=${3:-512}
 HEIGHT=${4:-512}
 
 dims=""$WIDTH"x"$HEIGHT""
-images="$()"
 find $2 -type f -name "*.jpg" | xargs --max-procs=16 -n 9000 \
     mogrify -resize "$dims"\> -extent "$dims"\> -gravity center -background white
