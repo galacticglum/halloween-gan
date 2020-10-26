@@ -1,6 +1,3 @@
-[submodule "stylegan2"]
-	path = stylegan2
-	url = https://github.com/GalacticGlum/stylegan2.git
 [submodule "stylegan2-ada"]
 	path = stylegan2-ada
 	url = https://github.com/NVlabs/stylegan2-ada.git
